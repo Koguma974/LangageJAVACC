@@ -1,21 +1,21 @@
-PARSER_BEGIN(COMPILATEUR)
-public class Compilateur {
+PARSER_BEGIN(Compiler)
+public class Compiler {
   public static void main(String[] args) {
     Compilateur parser = new Compilateur(System.in);
     Compilateur.Programme();
     System.out.println("OMG CA MARCHE");
   }
 }
-PARSER_END(COMPILATEUR)
+PARSER_END(Compiler)
 
 SKIP : {
   " " | "\t"
 }
 
-############ Terminaux / Types ############
+// ############ Terminaux / Types ############
 
 TOKEN : {
-  <STRING: (<CHAR>)* >
+  <STRING: (<CHAR>)+ >
 | <CHAR: <LETTRE> | <CHIFFRE> | <SYMBOLE> >
 | <LETTRE: ["a"-"z","A"-"Z"]>
 | <CHIFFRE: ["0"-"9"]>
@@ -25,9 +25,9 @@ TOKEN : {
 | <VARIABLELOG: <BOOLEAN> | <IDENTIFIANT> >
 
 | <NOMBRE: <INT> | <FLOAT> >
-| <INT: <INT> <CHIFFRE> | <CHIFFRE> >
-| <FLOAT: <INTEGER> | <INTEGER>  "." <INTEGER> >
-| <VARIABLE ARITH: <NOMBRE> | <IDENTIFIANT> >
+| <INT: (<CHIFFRE>)* >
+| <FLOAT: <INT> | <INT>  "." <INT> >
+| <VARIABLEARITH: <NOMBRE> | <IDENTIFIANT> >
 
   // <IDENTIFIANT: <LETTRE> (<SUITEIDENTIFIANT>)* >
   // <SUITEIDENTIFIANT: <LETTRE> <SUITEIDENTIFIANT> | <CHIFFRE> <SUITEIDENTIFIANT> | "_" <SUITEIDENTIFIANT> >
@@ -36,7 +36,7 @@ TOKEN : {
 
 }
 
-############ Listes ############
+// ############ Listes ############
 
 // void IntListe() : {}
 // {
@@ -48,26 +48,26 @@ TOKEN : {
 //}
 
 TOKEN : {
-  <INTLISTE: "[" (<INT> (<"," <INT>)*)+ "]" >
-| <STRINGLISTE: "[" (<STRING> (<"," <STRING>)*)+ "]" >
-| <FLOATLISTE: "[" (<FLOAT> (<"," <FLOAT>)*)+ "]" >
-| <BOOLLISTE: "[" (<BOOLEAN> (<"," <BOOLEAN>)*)+ "]" >
+  <INTLISTE: "[" (<INT> ("," <INT>)*)+ "]" >
+| <STRINGLISTE: "[" (<STRING> ("," <STRING>)*)+ "]" >
+| <FLOATLISTE: "[" (<FLOAT> ("," <FLOAT>)*)+ "]" >
+| <BOOLLISTE: "[" (<BOOLEAN> ("," <BOOLEAN>)*)+ "]" >
 }
 
-############ Logique ############
+// ############ Logique ############
 
 TOKEN : {
-  <EXPRLOG: (<EXPRLOG> "or" <ELTLOG>) | <ELTLOG> >
-| <ELTLOG: (<ELTLOG> "and" <TERMELOG>) | <TERMELOG> >
-| <TERMELOG: <VALOG> | "!"<VALOG> >
-| <VALOG : <VARIABLELOG> | "(" <EXPRLOG> ")" | <APPELFUNCLOG> | <COMP> | <IDENTIFIANT> "[" (<EXPARITH> (<"," <EXPARITH>)*)+ "]" >
+  <EXPRLOG: <ELTLOG> ("or" <ELTLOG>)* >
+| <ELTLOG: <TERMELOG> ("and" <TERMELOG>)* >
+| <TERMELOG: ("!" <VALOG>) | <VALOG> >
+| <VALOG: <VARIABLELOG> | <APPELFUNCLOG> | <COMP> | <IDENTIFIANT> "[" <EXPARITH> ("," <EXPARITH>)* "]" > // "("<EXPRLOG>")"
 }
 
 
-############ Comparaison ############
+// ############ Comparaison ############
 
 TOKEN : {
-  <COMP: (<EXPARITH> <OPCOMP> <EXPARITH>) | (<EXPARITH> <OPEQ> <EXPARITH>) | <EXPRSTRING> <OPEQ> <EXPRSTRING> >
+  <COMP: (<EXPARITH> <OPCOMP> <EXPARITH>) | (<EXPARITH> <OPEQ> <EXPARITH>) | (<EXPRSTRING> <OPEQ> <EXPRSTRING>) >
 | <OPEQ: "=" | "!=" >
-| <OPCOMP: ">" | "!"<VALOG> >
+| <OPCOMP: ">" | "<" | ">=" | "<=" >
 }
