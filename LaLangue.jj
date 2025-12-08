@@ -1,0 +1,73 @@
+PARSER_BEGIN(COMPILATEUR)
+public class Compilateur {
+  public static void main(String[] args) {
+    Compilateur parser = new Compilateur(System.in);
+    Compilateur.Programme();
+    System.out.println("OMG CA MARCHE");
+  }
+}
+PARSER_END(COMPILATEUR)
+
+SKIP : {
+  " " | "\t"
+}
+
+############ Terminaux / Types ############
+
+TOKEN : {
+  <STRING: (<CHAR>)* >
+| <CHAR: <LETTRE> | <CHIFFRE> | <SYMBOLE> >
+| <LETTRE: ["a"-"z","A"-"Z"]>
+| <CHIFFRE: ["0"-"9"]>
+| <#SYMBOLE: " " | "!" | "\"" | "#" | "$" | "%" | "&" | "'" | "(" | ")" | "*" | "+" | "," | "-" | "." | "/" | ":" | ";" | "<" | "=" | ">" | "?" | "@" | "[" | "\\" | "]" | "^" | "_" | "`" | "{" | "|" | "}" | "~">
+
+| <BOOLEAN: "true" | "false" >
+| <VARIABLELOG: <BOOLEAN> | <IDENTIFIANT> >
+
+| <NOMBRE: <INT> | <FLOAT> >
+| <INT: <INT> <CHIFFRE> | <CHIFFRE> >
+| <FLOAT: <INTEGER> | <INTEGER>  "." <INTEGER> >
+| <VARIABLE ARITH: <NOMBRE> | <IDENTIFIANT> >
+
+  // <IDENTIFIANT: <LETTRE> (<SUITEIDENTIFIANT>)* >
+  // <SUITEIDENTIFIANT: <LETTRE> <SUITEIDENTIFIANT> | <CHIFFRE> <SUITEIDENTIFIANT> | "_" <SUITEIDENTIFIANT> >
+
+|  <IDENTIFIANT: <LETTRE> (<LETTRE> | <CHIFFRE> | "_")*>
+
+}
+
+############ Listes ############
+
+// void IntListe() : {}
+// {
+//   "[" (EltInt())+ "]
+// }
+// void EltInt() : {}
+// {
+//  <INT> (<"," <INT>)*
+//}
+
+TOKEN : {
+  <INTLISTE: "[" (<INT> (<"," <INT>)*)+ "]" >
+| <STRINGLISTE: "[" (<STRING> (<"," <STRING>)*)+ "]" >
+| <FLOATLISTE: "[" (<FLOAT> (<"," <FLOAT>)*)+ "]" >
+| <BOOLLISTE: "[" (<BOOLEAN> (<"," <BOOLEAN>)*)+ "]" >
+}
+
+############ Logique ############
+
+TOKEN : {
+  <EXPRLOG: (<EXPRLOG> "or" <ELTLOG>) | <ELTLOG> >
+| <ELTLOG: (<ELTLOG> "and" <TERMELOG>) | <TERMELOG> >
+| <TERMELOG: <VALOG> | "!"<VALOG> >
+| <VALOG : <VARIABLELOG> | "(" <EXPRLOG> ")" | <APPELFUNCLOG> | <COMP> | <IDENTIFIANT> "[" (<EXPARITH> (<"," <EXPARITH>)*)+ "]" >
+}
+
+
+############ Comparaison ############
+
+TOKEN : {
+  <COMP: (<EXPARITH> <OPCOMP> <EXPARITH>) | (<EXPARITH> <OPEQ> <EXPARITH>) | <EXPRSTRING> <OPEQ> <EXPRSTRING> >
+| <OPEQ: "=" | "!=" >
+| <OPCOMP: ">" | "!"<VALOG> >
+}
