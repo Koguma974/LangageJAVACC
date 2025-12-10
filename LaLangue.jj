@@ -1,10 +1,19 @@
 PARSER_BEGIN(Compiler)
 public class Compiler {
-  public static void main(String[] args) {
-    Compilateur parser = new Compilateur(System.in);
-    Compilateur.Programme();
-    System.out.println("OMG CA MARCHE");
-  }
+    private Map globalVars = new HashMap();
+    private Map functions = new HashMap();
+    private Map procedures = new HashMap();
+    private Stack scopes = new Stack();
+
+  public static void main(String[] args) throws Exception {
+      if (args.length == 0) {
+        System.out.println("Usage: java Interpreter <filename>");
+        return;
+      }
+      Interpreter parser = new Interpreter(new FileInputStream(args[0]));
+      parser.Programme();
+      System.out.println("Program executed successfully.");
+    }
 }
 PARSER_END(Compiler)
 
@@ -70,4 +79,52 @@ TOKEN : {
   <COMP: (<EXPARITH> <OPCOMP> <EXPARITH>) | (<EXPARITH> <OPEQ> <EXPARITH>) | (<EXPRSTRING> <OPEQ> <EXPRSTRING>) >
 | <OPEQ: "=" | "!=" >
 | <OPCOMP: ">" | "<" | ">=" | "<=" >
+}
+
+// ############ Appels de fonction ############
+/*
+TOKEN : {
+  <APPELFUNC: <IDENTIFIANT> "(" (<LISTARGS>)? ")" >
+| <LISTARGS: <PARAM> ("," <PARAM>)? >
+| <PARAM: <EXPARITH> | <EXPRLOG> | <EXPRSTRING> | <IDENTIFIANT> >
+
+
+// Appels de fonction spécifiques par type de retour
+| <APPELFUNCLOG: <IDENTIFIANT> "(" (<LISTARGS>)? ")" >
+| <APPELFUNCARITH: <IDENTIFIANT> "(" (<LISTARGS>)? ")" >
+| <APPELFUNCSTRING: <IDENTIFIANT> "(" (<LISTARGS>)? ")" >
+
+}*/
+
+// ############ Appels de fonction ############
+
+// Liste d'arguments
+void ListArgs() : {}
+{
+  Param() ("," Param())*
+}
+
+// Un paramètre peut être n'importe quelle expression
+void Param() : {}
+{
+  <EXPARITH> | <EXPRLOG> | <EXPRSTRING> | <IDENTIFIANT>
+}
+
+// Type de retour
+void TypeRetour() : {}
+{
+  <NOMBRE> | <STRING> | <BOOLEAN> | <INTLISTE> | <STRINGLISTE> | <FLOATLISTE> | <BOOLLISTE>
+}
+
+// Fonction
+void AppelFunc() : {}
+{
+  <IDENTIFIANT> "(" (ListArgs())? ")" ":" TypeRetour()
+}
+
+// ############ Appels de procédure ############
+// Production pour appel de procédure (sans type de retour)
+void AppelProc() : {}
+{
+  <IDENTIFIANT> "(" (ListArgs())? ")" ";"
 }
