@@ -1,130 +1,705 @@
-PARSER_BEGIN(Compiler)
-public class Compiler {
-    private Map globalVars = new HashMap();
-    private Map functions = new HashMap();
-    private Map procedures = new HashMap();
-    private Stack scopes = new Stack();
+options {
+  STATIC = false;
+  DEBUG_PARSER = false;
+  LOOKAHEAD = 2;
+}
+
+PARSER_BEGIN(Interpreter)
+
+import java.util.*;
+import java.io.*;
+
+public class Interpreter {
+  private Map globalVars = new HashMap();
+  private Map functions = new HashMap();
+  private Map procedures = new HashMap();
+  private Stack scopes = new Stack();
 
   public static void main(String[] args) throws Exception {
-      if (args.length == 0) {
-        System.out.println("Usage: java Interpreter <filename>");
-        return;
-      }
-      Interpreter parser = new Interpreter(new FileInputStream(args[0]));
-      parser.Programme();
-      System.out.println("Program executed successfully.");
+    if (args.length == 0) {
+      System.out.println("Usage: java Interpreter <filename>");
+      return;
     }
+    Interpreter parser = new Interpreter(new FileInputStream(args[0]));
+    parser.Programme();
+    System.out.println("Program executed successfully.");
+  }
+
+  private void pushScope() {
+    scopes.push(new HashMap());
+  }
+
+  private void popScope() {
+    if (!scopes.isEmpty()) scopes.pop();
+  }
+
+  private void setVar(String name, Object value) {
+    if (!scopes.isEmpty()) {
+      ((Map)scopes.peek()).put(name, value);
+    } else {
+      globalVars.put(name, value);
+    }
+  }
+
+  private Object getVar(String name) {
+    for (int i = scopes.size() - 1; i >= 0; i--) {
+      Map scope = (Map)scopes.get(i);
+      if (scope.containsKey(name)) {
+        return scope.get(name);
+      }
+    }
+    return globalVars.get(name);
+  }
+
+  private Object getDefaultValue(String type) {
+    switch(type) {
+      case "int": return Integer.valueOf(0);
+      case "float": return Double.valueOf(0.0);
+      case "string": return "";
+      case "boolean": return Boolean.FALSE;
+      case "int[]": return new ArrayList();
+      case "float[]": return new ArrayList();
+      case "string[]": return new ArrayList();
+      case "boolean[]": return new ArrayList();
+      default: return null;
+    }
+  }
+
+    // ---------- helper numeric utilities ----------
+    private Number asNumber(Object o) {
+      if (o == null) return Integer.valueOf(0);
+      if (o instanceof Number) return (Number)o;
+      // try parse integer first, then double
+      try {
+        return Integer.valueOf(Integer.parseInt(o.toString()));
+      } catch (Exception e1) {
+        try {
+          return Double.valueOf(Double.parseDouble(o.toString()));
+        } catch (Exception e2) {
+          return Integer.valueOf(0);
+        }
+      }
+    }
+
+    private Object addObj(Object a, Object b) {
+      Number na = asNumber(a);
+      Number nb = asNumber(b);
+      if (na instanceof Integer && nb instanceof Integer) {
+        return Integer.valueOf(na.intValue() + nb.intValue());
+      } else {
+        return Double.valueOf(na.doubleValue() + nb.doubleValue());
+      }
+    }
+
+    private Object subObj(Object a, Object b) {
+      Number na = asNumber(a);
+      Number nb = asNumber(b);
+      if (na instanceof Integer && nb instanceof Integer) {
+        return Integer.valueOf(na.intValue() - nb.intValue());
+      } else {
+        return Double.valueOf(na.doubleValue() - nb.doubleValue());
+      }
+    }
+
+    private Object mulObj(Object a, Object b) {
+      Number na = asNumber(a);
+      Number nb = asNumber(b);
+      if (na instanceof Integer && nb instanceof Integer) {
+        return Integer.valueOf(na.intValue() * nb.intValue());
+      } else {
+        return Double.valueOf(na.doubleValue() * nb.doubleValue());
+      }
+    }
+
+    private Object divObj(Object a, Object b) {
+      Number na = asNumber(a);
+      Number nb = asNumber(b);
+      double denom = nb.doubleValue();
+      if (denom == 0.0) return Double.valueOf(0.0);
+      // always produce Double for division
+      return Double.valueOf(na.doubleValue() / denom);
+    }
+
+    private Object negObj(Object a) {
+      Number na = asNumber(a);
+      if (na instanceof Integer) return Integer.valueOf(-na.intValue());
+      return Double.valueOf(-na.doubleValue());
+    }
+    // ---------- end helpers ----------
+
+
+  static class FunctionDef {
+    String returnType;
+    List params;
+
+    FunctionDef(String returnType, List params) {
+      this.returnType = returnType;
+      this.params = params;
+    }
+  }
+
+  static class ProcDef {
+    List params;
+
+    ProcDef(List params) {
+      this.params = params;
+    }
+  }
+
+  static class Param {
+    String type;
+    String name;
+
+    Param(String type, String name) {
+      this.type = type;
+      this.name = name;
+    }
+  }
+
+  static class ReturnValue extends RuntimeException {
+    Object value;
+    ReturnValue(Object value) {
+      this.value = value;
+    }
+  }
 }
-PARSER_END(Compiler)
 
-SKIP : {
-  " " | "\t"
+PARSER_END(Interpreter)
+
+
+SKIP: { " " | "\t" | "\n" | "\r" }
+
+SKIP: { <"//" (~["\n","\r"])* ("\n"|"\r"|"\r\n")> }
+
+TOKEN: {
+  <FUN: "fun">
+| <PROC: "proc">
+| <MAIN: "main">
+| <IF: "if">
+| <ELSE: "else">
+| <WHILE: "while">
+| <RETURN: "return">
+| <PRINT: "print">
+| <INPUT: "input">
+| <TRUE: "true">
+| <FALSE: "false">
+| <INT_TYPE: "int">
+| <FLOAT_TYPE: "float">
+| <STRING_TYPE: "string">
+| <BOOLEAN_TYPE: "boolean">
+| <AND: "and">
+| <OR: "or">
 }
 
-// ############ Terminaux / Types ############
-
-TOKEN : {
-  <STRING: (<CHAR>)+ >
-| <CHAR: <LETTRE> | <CHIFFRE> | <SYMBOLE> >
-| <LETTRE: ["a"-"z","A"-"Z"]>
-| <CHIFFRE: ["0"-"9"]>
-| <#SYMBOLE: " " | "!" | "\"" | "#" | "$" | "%" | "&" | "'" | "(" | ")" | "*" | "+" | "," | "-" | "." | "/" | ":" | ";" | "<" | "=" | ">" | "?" | "@" | "[" | "\\" | "]" | "^" | "_" | "`" | "{" | "|" | "}" | "~">
-
-| <BOOLEAN: "true" | "false" >
-| <VARIABLELOG: <BOOLEAN> | <IDENTIFIANT> >
-
-| <NOMBRE: <INT> | <FLOAT> >
-| <INT: (<CHIFFRE>)* >
-| <FLOAT: <INT> | <INT>  "." <INT> >
-| <VARIABLEARITH: <NOMBRE> | <IDENTIFIANT> >
-
-  // <IDENTIFIANT: <LETTRE> (<SUITEIDENTIFIANT>)* >
-  // <SUITEIDENTIFIANT: <LETTRE> <SUITEIDENTIFIANT> | <CHIFFRE> <SUITEIDENTIFIANT> | "_" <SUITEIDENTIFIANT> >
-
-|  <IDENTIFIANT: <LETTRE> (<LETTRE> | <CHIFFRE> | "_")*>
-
+TOKEN: {
+  <ASSIGN: ":=">
+| <EQ: "=">
+| <NEQ: "!=">
+| <LT: "<">
+| <GT: ">">
+| <LE: "<=">
+| <GE: ">=">
+| <PLUS: "+">
+| <MINUS: "-">
+| <MULT: "*">
+| <DIV: "/">
+| <NOT: "!">
+| <LPAREN: "(">
+| <RPAREN: ")">
+| <LBRACE: "{">
+| <RBRACE: "}">
+| <LBRACK: "[">
+| <RBRACK: "]">
+| <SEMICOLON: ";">
+| <COMMA: ",">
 }
 
-// ############ Listes ############
-
-// void IntListe() : {}
-// {
-//   "[" (EltInt())+ "]
-// }
-// void EltInt() : {}
-// {
-//  <INT> (<"," <INT>)*
-//}
-
-TOKEN : {
-  <INTLISTE: "[" (<INT> ("," <INT>)*)+ "]" >
-| <STRINGLISTE: "[" (<STRING> ("," <STRING>)*)+ "]" >
-| <FLOATLISTE: "[" (<FLOAT> ("," <FLOAT>)*)+ "]" >
-| <BOOLLISTE: "[" (<BOOLEAN> ("," <BOOLEAN>)*)+ "]" >
+TOKEN: {
+  <FLOAT_LIT: (["0"-"9"])+ "." (["0"-"9"])+>
+| <INTEGER: (["0"-"9"])+>
+| <STRING_LIT: "\"" (~["\"","\\"] | "\\" ~[])* "\"">
+| <IDENTIFIER: ["a"-"z","A"-"Z","_"](["a"-"z","A"-"Z","0"-"9","_"])*>
 }
 
-// ############ Logique ############
+void Programme(): {} {
+  ListeDeclarations()
+  ListeFonctionsEtProcs()
+  Main()
+  <EOF>
+}
 
-TOKEN : {
-  <EXPRLOG: <ELTLOG> ("or" <ELTLOG>)* >
-| <ELTLOG: <TERMELOG> ("and" <TERMELOG>)* >
-| <TERMELOG: ("!" <VALOG>) | <VALOG> >
-| <VALOG: <VARIABLELOG> | <APPELFUNCLOG> | <COMP> | <IDENTIFIANT> "[" <EXPARITH> ("," <EXPARITH>)* "]" > // "("<EXPRLOG>")"
+void ListeDeclarations(): {} {
+  (DeclarationVar())*
+}
+
+void DeclarationVar(): {
+  String type;
+  List ids = new ArrayList();
+} {
+  type = Type()
+  ListeIdentifiantVar(ids)
+  <SEMICOLON>
+  {
+    for (int i = 0; i < ids.size(); i++) {
+      String id = (String)ids.get(i);
+      Object initVal = getDefaultValue(type);
+      setVar(id, initVal);
+    }
+  }
+}
+
+void ListeIdentifiantVar(List ids): {
+  Token t;
+} {
+  t = <IDENTIFIER> { ids.add(t.image); }
+  (<COMMA> t = <IDENTIFIER> { ids.add(t.image); })*
+}
+
+String Type(): {
+  String base = "";
+} {
+  (
+    <INT_TYPE> { base = "int"; }
+  | <FLOAT_TYPE> { base = "float"; }
+  | <STRING_TYPE> { base = "string"; }
+  | <BOOLEAN_TYPE> { base = "boolean"; }
+  )
+  (
+    <LBRACK> <RBRACK> { base += "[]"; }
+  )?
+  { return base; }
+}
+
+void ListeFonctionsEtProcs(): {} {
+  (
+    LOOKAHEAD(3) DeclarationFunc()
+  | DeclarationProc()
+  )*
+}
+
+void DeclarationFunc(): {
+  String returnType;
+  Token name;
+  List params;
+} {
+  <FUN> <LPAREN> returnType = Type() <RPAREN>
+  name = <IDENTIFIER>
+  <LPAREN> params = ListeParam() <RPAREN>
+  <LBRACE>
+    {
+      FunctionDef func = new FunctionDef(returnType, params);
+      functions.put(name.image, func);
+      pushScope();
+      for (int i = 0; i < params.size(); i++) {
+        Param p = (Param)params.get(i);
+        setVar(p.name, getDefaultValue(p.type));
+      }
+    }
+    ListeDeclarations()
+    ListeInstructions()
+    { popScope(); }
+  <RBRACE>
+}
+
+void DeclarationProc(): {
+  Token name;
+  List params;
+} {
+  <PROC>
+  name = <IDENTIFIER>
+  <LPAREN> params = ListeParam() <RPAREN>
+  <LBRACE>
+    {
+      ProcDef proc = new ProcDef(params);
+      procedures.put(name.image, proc);
+      pushScope();
+      for (int i = 0; i < params.size(); i++) {
+        Param p = (Param)params.get(i);
+        setVar(p.name, getDefaultValue(p.type));
+      }
+    }
+    ListeDeclarations()
+    ListeInstructions()
+    { popScope(); }
+  <RBRACE>
+}
+
+List ListeParam(): {
+  List params = new ArrayList();
+  Param p;
+} {
+  (
+    p = DeclarationParam() { params.add(p); }
+    (<COMMA> p = DeclarationParam() { params.add(p); })*
+  )?
+  { return params; }
+}
+
+Param DeclarationParam(): {
+  String type;
+  Token name;
+} {
+  type = Type()
+  name = <IDENTIFIER>
+  { return new Param(type, name.image); }
+}
+
+void Main(): {} {
+  <MAIN>
+  <LBRACE>
+    { pushScope(); }
+    ListeDeclarations()
+    ListeInstructions()
+    { popScope(); }
+  <RBRACE>
+}
+
+void ListeInstructions(): {} {
+  (Instruction())*
+}
+
+void Instruction(): {} {
+  LOOKAHEAD(3) Affectation() <SEMICOLON>
+| Si()
+| TantQue()
+| Retour() <SEMICOLON>
+| LOOKAHEAD(3) AppelProc() <SEMICOLON>
+| Affichage() <SEMICOLON>
+| Bloc()
+}
+
+void Bloc(): {} {
+  <LBRACE>
+    { pushScope(); }
+    ListeInstructions()
+    { popScope(); }
+  <RBRACE>
+}
+
+void Affectation(): {
+  String varName;
+  Object index = null;
+  Object value;
+} {
+  varName = NomVariable()
+  (
+    <LBRACK> index = ExprArith() <RBRACK>
+  )?
+  <ASSIGN>
+  value = Expr()
+  {
+    if (index != null) {
+      Object var = getVar(varName);
+      if (var instanceof List) {
+
+        // ---------------------------
+        // FIX: dynamically grow array
+        // ---------------------------
+        List list = (List)var;
+        int idx = ((Number)index).intValue();
+
+        while (list.size() <= idx)
+            list.add(null);
+
+        list.set(idx, value);
+      }
+    } else {
+      setVar(varName, value);
+    }
+  }
+}
+
+String NomVariable(): {
+  Token t;
+} {
+  t = <IDENTIFIER>
+  { return t.image; }
+}
+
+void Si(): {
+  boolean cond;
+} {
+  <IF> <LPAREN> cond = ExprLog() <RPAREN>
+  Bloc()
+  (
+    <ELSE> Bloc()
+  )?
+}
+
+void TantQue(): {
+  boolean cond;
+  Token savedPos;
+} {
+  <WHILE>
+  <LPAREN>
+      cond = ExprLog()
+  <RPAREN>
+
+  {
+    // Save the position BEFORE executing the block
+    // so we can re-parse the block each iteration.
+    savedPos = token;
+  }
+
+  <LBRACE>
+
+  {
+    while (cond) {
+        // Reparse the inside of the block each iteration
+        // Push a scope for the block
+        pushScope();
+        ListeInstructions();
+        popScope();
+
+        // After executing, re-evaluate the condition
+        cond = ExprLog();
+
+        // Reset parser position to after the '('
+        this.token = savedPos;
+      }
+    // After loop ends, skip the block entirely
+    // Parse it once to move parser forward
+    pushScope();
+  }
+
+  ListeInstructions()
+  { popScope(); }
+
+  <RBRACE>
 }
 
 
-// ############ Comparaison ############
-
-TOKEN : {
-  <COMP: (<EXPARITH> <OPCOMP> <EXPARITH>) | (<EXPARITH> <OPEQ> <EXPARITH>) | (<EXPRSTRING> <OPEQ> <EXPRSTRING>) >
-| <OPEQ: "=" | "!=" >
-| <OPCOMP: ">" | "<" | ">=" | "<=" >
+void Retour(): {
+  Object value;
+} {
+  <RETURN> value = Expr()
+  { throw new ReturnValue(value); }
 }
 
-// ############ Appels de fonction ############
-/*
-TOKEN : {
-  <APPELFUNC: <IDENTIFIANT> "(" (<LISTARGS>)? ")" >
-| <LISTARGS: <PARAM> ("," <PARAM>)? >
-| <PARAM: <EXPARITH> | <EXPRLOG> | <EXPRSTRING> | <IDENTIFIANT> >
-
-
-// Appels de fonction spécifiques par type de retour
-| <APPELFUNCLOG: <IDENTIFIANT> "(" (<LISTARGS>)? ")" >
-| <APPELFUNCARITH: <IDENTIFIANT> "(" (<LISTARGS>)? ")" >
-| <APPELFUNCSTRING: <IDENTIFIANT> "(" (<LISTARGS>)? ")" >
-
-}*/
-
-// ############ Appels de fonction ############
-
-// Liste d'arguments
-void ListArgs() : {}
-{
-  Param() ("," Param())*
+void AppelProc(): {
+  Token name;
+  List args;
+} {
+  name = <IDENTIFIER>
+  <LPAREN> args = ListeArgs() <RPAREN>
 }
 
-// Un paramètre peut être n'importe quelle expression
-void Param() : {}
-{
-  <EXPARITH> | <EXPRLOG> | <EXPRSTRING> | <IDENTIFIANT>
+void Affichage(): {
+  Object value;
+} {
+  <PRINT> <LPAREN> value = Expr() <RPAREN>
+  { System.out.println(value); }
 }
 
-// Type de retour
-void TypeRetour() : {}
-{
-  <NOMBRE> | <STRING> | <BOOLEAN> | <INTLISTE> | <STRINGLISTE> | <FLOATLISTE> | <BOOLLISTE>
+Object Expr(): {
+  Object val;
+} {
+  (
+    LOOKAHEAD(3) val = ExprArith() { return val; }
+  | LOOKAHEAD(3) val = ExprLog() { return val; }
+  | val = ExprString() { return val; }
+  )
 }
 
-// Fonction
-void AppelFunc() : {}
-{
-  <IDENTIFIANT> "(" (ListArgs())? ")" ":" TypeRetour()
+boolean ExprLog(): {
+  boolean left, right;
+} {
+  left = EltLog()
+  (
+    <OR> right = EltLog() { left = left || right; }
+  )*
+  { return left; }
 }
 
-// ############ Appels de procédure ############
-// Production pour appel de procédure (sans type de retour)
-void AppelProc() : {}
-{
-  <IDENTIFIANT> "(" (ListArgs())? ")" ";"
+boolean EltLog(): {
+  boolean left, right;
+} {
+  left = TermeLog()
+  (
+    <AND> right = TermeLog() { left = left && right; }
+  )*
+  { return left; }
+}
+
+boolean TermeLog(): {
+  boolean val;
+} {
+  <NOT> val = ValLog() { return !val; }
+| val = ValLog() { return val; }
+}
+
+boolean ValLog(): {
+  boolean val;
+  Token t;
+  Object expr;
+} {
+  <TRUE> { return true; }
+| <FALSE> { return false; }
+| <LPAREN> val = ExprLog() <RPAREN> { return val; }
+| LOOKAHEAD(Comp()) val = Comp() { return val; }
+| t = <IDENTIFIER>
+  (
+    <LBRACK> expr = ExprArith() <RBRACK> {
+      Object var = getVar(t.image);
+      if (var instanceof List) {
+        int idx = ((Number)expr).intValue();
+        Object elem = ((List)var).get(idx);
+        if (elem instanceof Boolean) return (Boolean)elem;
+      }
+      return false;
+    }
+  | {
+      Object v = getVar(t.image);
+      if (v instanceof Boolean) return (Boolean)v;
+      return false;
+    }
+  )
+}
+
+boolean Comp(): {
+  Object left, right;
+  String op;
+} {
+  left = ExprArith()
+  (
+    op = OpComp() right = ExprArith()
+    {
+      double l = ((Number)left).doubleValue();
+      double r = ((Number)right).doubleValue();
+      switch(op) {
+        case ">": return l > r;
+        case "<": return l < r;
+        case ">=": return l >= r;
+        case "<=": return l <= r;
+        case "=": return l == r;
+        case "!=": return l != r;
+        default: return false;
+      }
+    }
+  )
+}
+
+String OpComp(): {} {
+  <GT> { return ">"; }
+| <LT> { return "<"; }
+| <GE> { return ">="; }
+| <LE> { return "<="; }
+| <EQ> { return "="; }
+| <NEQ> { return "!="; }
+}
+
+Object ExprArith(): {
+  Object left, right;
+} {
+  left = EltArith()
+  (
+    <PLUS> right = EltArith() {
+      left = addObj(left, right);
+    }
+  | <MINUS> right = EltArith() {
+      left = subObj(left, right);
+    }
+  )*
+  { return left; }
+}
+
+Object EltArith(): {
+  Object left, right;
+} {
+  left = TermArith()
+  (
+    <MULT> right = TermArith() {
+      left = mulObj(left, right);
+    }
+  | <DIV> right = TermArith() {
+      left = divObj(left, right);
+    }
+  )*
+  { return left; }
+}
+
+Object TermArith(): {
+  Object val;
+} {
+  <MINUS> val = ValArith() {
+    return negObj(val);
+  }
+| val = ValArith() { return val; }
+}
+
+Object ValArith(): {
+  Token t;
+  Object val;
+  Object expr;
+} {
+  t = <INTEGER> { return Integer.parseInt(t.image); }
+| t = <FLOAT_LIT> { return Double.parseDouble(t.image); }
+| <LPAREN> val = ExprArith() <RPAREN> { return val; }
+| t = <IDENTIFIER>
+  (
+    <LBRACK> expr = ExprArith() <RBRACK> {
+      Object var = getVar(t.image);
+      if (var instanceof List) {
+        int idx = asNumber(expr).intValue();
+        List list = (List)var;
+        if (idx >= 0 && idx < list.size()) {
+          Object elem = list.get(idx);
+          // return element as-is if numeric, else coerce to number
+          if (elem instanceof Number) return elem;
+          return asNumber(elem);
+        }
+      }
+      return Integer.valueOf(0);
+    }
+  | {
+      Object v = getVar(t.image);
+      return asNumber(v);
+    }
+  )
+}
+
+
+Object ExprString(): {
+  Object result;
+  Object next;
+} {
+  <INPUT> <LPAREN> <RPAREN> {
+    Scanner sc = new Scanner(System.in);
+    return sc.nextLine();
+  }
+| result = TermeString()
+  (
+    <PLUS> next = TermeString() {
+      result = result.toString() + next.toString();
+    }
+  )*
+  { return result; }
+}
+
+Object TermeString(): {
+  Token t;
+  Object val;
+} {
+  t = <STRING_LIT> {
+    String s = t.image;
+    return s.substring(1, s.length() - 1);
+  }
+| <LPAREN> val = ExprArith() <RPAREN> {
+    return val.toString();
+  }
+| t = <IDENTIFIER> {
+    Object v = getVar(t.image);
+    return v != null ? v.toString() : "";
+  }
+}
+
+List ListeArgs(): {
+  List args = new ArrayList();
+  Object arg;
+} {
+  (
+    arg = Expr() { args.add(arg); }
+    (<COMMA> arg = Expr() { args.add(arg); })*
+  )?
+  { return args; }
 }

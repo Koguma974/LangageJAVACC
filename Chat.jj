@@ -10,21 +10,108 @@ import java.util.*;
 import java.io.*;
 
 public class Interpreter {
+  // Simple AST node classes as inner classes
+  static class ASTNode {}
+
+  static class Program extends ASTNode {
+    List declarations;
+    List functions;
+    List procedures;
+    Object main;
+  }
+
+  static class Block extends ASTNode {
+    List statements;
+  }
+
+  static class VarDecl extends ASTNode {
+    String type;
+    List names;
+  }
+
+  static class Assignment extends ASTNode {
+    String varName;
+    Object index;
+    Object value;
+  }
+
+  static class IfStmt extends ASTNode {
+    Object condition;
+    Object thenBlock;
+    Object elseBlock;
+  }
+
+  static class WhileStmt extends ASTNode {
+    Object condition;
+    Object body;
+  }
+
+  static class PrintStmt extends ASTNode {
+    Object expression;
+  }
+
+  static class ReturnStmt extends ASTNode {
+    Object value;
+  }
+
+  static class FuncCall extends ASTNode {
+    String name;
+    List args;
+  }
+
+  static class FuncDef extends ASTNode {
+    String name;
+    String returnType;
+    List params;
+    Object body;
+  }
+
+  static class ProcDef extends ASTNode {
+    String name;
+    List params;
+    Object body;
+  }
+
+  static class Param extends ASTNode {
+    String type;
+    String name;
+  }
+
+  static class BinaryExpr extends ASTNode {
+    String operator;
+    Object left;
+    Object right;
+  }
+
+  static class UnaryExpr extends ASTNode {
+    String operator;
+    Object operand;
+  }
+
+  static class Variable extends ASTNode {
+    String name;
+    Object index;
+  }
+
+  static class Literal extends ASTNode {
+    Object value;
+  }
+
+  static class ArrayLiteral extends ASTNode {
+    List elements;
+  }
+
+  static class InputExpr extends ASTNode {}
+
+  // Interpreter state
   private Map globalVars = new HashMap();
   private Map functions = new HashMap();
   private Map procedures = new HashMap();
   private Stack scopes = new Stack();
+  private boolean hasReturned = false;
+  private Object returnValue = null;
 
-  public static void main(String[] args) throws Exception {
-    if (args.length == 0) {
-      System.out.println("Usage: java Interpreter <filename>");
-      return;
-    }
-    Interpreter parser = new Interpreter(new FileInputStream(args[0]));
-    parser.Programme();
-    System.out.println("Program executed successfully.");
-  }
-
+  // Helper methods
   private void pushScope() {
     scopes.push(new HashMap());
   }
@@ -52,51 +139,274 @@ public class Interpreter {
   }
 
   private Object getDefaultValue(String type) {
-    switch(type) {
-      case "int": return Integer.valueOf(0);
-      case "float": return Double.valueOf(0.0);
-      case "string": return "";
-      case "boolean": return Boolean.FALSE;
-      case "int[]": return new ArrayList();
-      case "float[]": return new ArrayList();
-      case "string[]": return new ArrayList();
-      case "boolean[]": return new ArrayList();
-      default: return null;
+    if (type.equals("int")) return Integer.valueOf(0);
+    if (type.equals("float")) return Double.valueOf(0.0);
+    if (type.equals("string")) return "";
+    if (type.equals("boolean")) return Boolean.FALSE;
+    if (type.equals("int[]")) return new ArrayList();
+    if (type.equals("float[]")) return new ArrayList();
+    if (type.equals("string[]")) return new ArrayList();
+    if (type.equals("boolean[]")) return new ArrayList();
+    return null;
+  }
+
+  // Execution methods
+  private void executeProgram(Program program) {
+    if (program.declarations != null) {
+      for (int i = 0; i < program.declarations.size(); i++) {
+        execute(program.declarations.get(i));
+      }
+    }
+
+    if (program.functions != null) {
+      for (int i = 0; i < program.functions.size(); i++) {
+        FuncDef func = (FuncDef)program.functions.get(i);
+        functions.put(func.name, func);
+      }
+    }
+
+    if (program.procedures != null) {
+      for (int i = 0; i < program.procedures.size(); i++) {
+        ProcDef proc = (ProcDef)program.procedures.get(i);
+        procedures.put(proc.name, proc);
+      }
+    }
+
+    if (program.main != null) {
+      execute(program.main);
     }
   }
 
-  static class FunctionDef {
-    String returnType;
-    List params;
+  private Object execute(Object node) {
+    if (node == null) return null;
 
-    FunctionDef(String returnType, List params) {
-      this.returnType = returnType;
-      this.params = params;
+    if (node instanceof Block) {
+      return executeBlock((Block)node);
+    } else if (node instanceof VarDecl) {
+      return executeVarDecl((VarDecl)node);
+    } else if (node instanceof Assignment) {
+      return executeAssignment((Assignment)node);
+    } else if (node instanceof IfStmt) {
+      return executeIf((IfStmt)node);
+    } else if (node instanceof WhileStmt) {
+      return executeWhile((WhileStmt)node);
+    } else if (node instanceof PrintStmt) {
+      return executePrint((PrintStmt)node);
+    } else if (node instanceof ReturnStmt) {
+      return executeReturn((ReturnStmt)node);
+    } else if (node instanceof FuncCall) {
+      return executeFuncCall((FuncCall)node);
+    } else if (node instanceof BinaryExpr) {
+      return evaluateBinary((BinaryExpr)node);
+    } else if (node instanceof UnaryExpr) {
+      return evaluateUnary((UnaryExpr)node);
+    } else if (node instanceof Variable) {
+      return evaluateVariable((Variable)node);
+    } else if (node instanceof Literal) {
+      return ((Literal)node).value;
+    } else if (node instanceof ArrayLiteral) {
+      return evaluateArrayLiteral((ArrayLiteral)node);
+    } else if (node instanceof InputExpr) {
+      Scanner sc = new Scanner(System.in);
+      return sc.nextLine();
     }
+
+    return null;
   }
 
-  static class ProcDef {
-    List params;
+  private Object executeBlock(Block block) {
+    pushScope();
+    Object result = null;
 
-    ProcDef(List params) {
-      this.params = params;
+    if (block.statements != null) {
+      for (int i = 0; i < block.statements.size(); i++) {
+        result = execute(block.statements.get(i));
+        if (hasReturned) break;
+      }
     }
+
+    popScope();
+    return result;
   }
 
-  static class Param {
-    String type;
-    String name;
-
-    Param(String type, String name) {
-      this.type = type;
-      this.name = name;
+  private Object executeVarDecl(VarDecl decl) {
+    Object defaultValue = getDefaultValue(decl.type);
+    for (int i = 0; i < decl.names.size(); i++) {
+      String name = (String)decl.names.get(i);
+      setVar(name, defaultValue);
     }
+    return null;
   }
 
-  static class ReturnValue extends RuntimeException {
-    Object value;
-    ReturnValue(Object value) {
-      this.value = value;
+  private Object executeAssignment(Assignment assign) {
+    Object value = execute(assign.value);
+
+    if (assign.index != null) {
+      Object array = getVar(assign.varName);
+      if (array instanceof List) {
+        int idx = ((Number)execute(assign.index)).intValue();
+        List list = (List)array;
+        while (list.size() <= idx) {
+          list.add(getDefaultValueForArray(array));
+        }
+        list.set(idx, value);
+      }
+    } else {
+      setVar(assign.varName, value);
+    }
+
+    return value;
+  }
+
+  private Object getDefaultValueForArray(Object array) {
+    if (array instanceof List && !((List)array).isEmpty()) {
+      Object first = ((List)array).get(0);
+      if (first instanceof Integer) return Integer.valueOf(0);
+      if (first instanceof Double) return Double.valueOf(0.0);
+      if (first instanceof String) return "";
+      if (first instanceof Boolean) return Boolean.FALSE;
+    }
+    return Integer.valueOf(0);
+  }
+
+  private Object executeIf(IfStmt ifStmt) {
+    boolean cond = ((Boolean)execute(ifStmt.condition)).booleanValue();
+    if (cond) {
+      return execute(ifStmt.thenBlock);
+    } else if (ifStmt.elseBlock != null) {
+      return execute(ifStmt.elseBlock);
+    }
+    return null;
+  }
+
+  private Object executeWhile(WhileStmt whileStmt) {
+    Object result = null;
+    while (true) {
+      boolean cond = ((Boolean)execute(whileStmt.condition)).booleanValue();
+      if (!cond) break;
+      result = execute(whileStmt.body);
+      if (hasReturned) break;
+    }
+    return result;
+  }
+
+  private Object executePrint(PrintStmt print) {
+    Object value = execute(print.expression);
+    System.out.println(value);
+    return null;
+  }
+
+  private Object executeReturn(ReturnStmt ret) {
+    hasReturned = true;
+    if (ret.value != null) {
+      returnValue = execute(ret.value);
+    } else {
+      returnValue = null;
+    }
+    throw new RuntimeException("Return");
+  }
+
+  private Object executeFuncCall(FuncCall call) {
+    System.out.println("Calling: " + call.name);
+    return null;
+  }
+
+  private Object evaluateBinary(BinaryExpr expr) {
+    Object left = execute(expr.left);
+    Object right = execute(expr.right);
+
+    if (expr.operator.equals("+")) {
+      if (left instanceof Number && right instanceof Number) {
+        return Double.valueOf(((Number)left).doubleValue() + ((Number)right).doubleValue());
+      }
+      return left.toString() + right.toString();
+    } else if (expr.operator.equals("-")) {
+      return Double.valueOf(((Number)left).doubleValue() - ((Number)right).doubleValue());
+    } else if (expr.operator.equals("*")) {
+      return Double.valueOf(((Number)left).doubleValue() * ((Number)right).doubleValue());
+    } else if (expr.operator.equals("/")) {
+      double divisor = ((Number)right).doubleValue();
+      return divisor == 0 ? Double.valueOf(0) : Double.valueOf(((Number)left).doubleValue() / divisor);
+    } else if (expr.operator.equals("and")) {
+      return Boolean.valueOf(((Boolean)left).booleanValue() && ((Boolean)right).booleanValue());
+    } else if (expr.operator.equals("or")) {
+      return Boolean.valueOf(((Boolean)left).booleanValue() || ((Boolean)right).booleanValue());
+    } else if (expr.operator.equals("=")) {
+      if (left instanceof Number && right instanceof Number) {
+        return Boolean.valueOf(((Number)left).doubleValue() == ((Number)right).doubleValue());
+      }
+      return Boolean.valueOf(left.equals(right));
+    } else if (expr.operator.equals("!=")) {
+      return Boolean.valueOf(!left.equals(right));
+    } else if (expr.operator.equals("<")) {
+      return Boolean.valueOf(((Number)left).doubleValue() < ((Number)right).doubleValue());
+    } else if (expr.operator.equals(">")) {
+      return Boolean.valueOf(((Number)left).doubleValue() > ((Number)right).doubleValue());
+    } else if (expr.operator.equals("<=")) {
+      return Boolean.valueOf(((Number)left).doubleValue() <= ((Number)right).doubleValue());
+    } else if (expr.operator.equals(">=")) {
+      return Boolean.valueOf(((Number)left).doubleValue() >= ((Number)right).doubleValue());
+    }
+    return null;
+  }
+
+  private Object evaluateUnary(UnaryExpr expr) {
+    Object value = execute(expr.operand);
+    if (expr.operator.equals("!")) {
+      return Boolean.valueOf(!((Boolean)value).booleanValue());
+    } else if (expr.operator.equals("-")) {
+      return Double.valueOf(-((Number)value).doubleValue());
+    }
+    return value;
+  }
+
+  private Object evaluateVariable(Variable var) {
+    Object value = getVar(var.name);
+    if (value == null) {
+      return Integer.valueOf(0);
+    }
+
+    if (var.index != null && value instanceof List) {
+      int idx = ((Number)execute(var.index)).intValue();
+      List list = (List)value;
+      if (idx >= 0 && idx < list.size()) {
+        return list.get(idx);
+      }
+      return getDefaultValueForArray(value);
+    }
+
+    return value;
+  }
+
+  private Object evaluateArrayLiteral(ArrayLiteral array) {
+    List result = new ArrayList();
+    if (array.elements != null) {
+      for (int i = 0; i < array.elements.size(); i++) {
+        result.add(execute(array.elements.get(i)));
+      }
+    }
+    return result;
+  }
+
+  public static void main(String[] args) throws Exception {
+    if (args.length == 0) {
+      System.out.println("Usage: java Interpreter <filename>");
+      return;
+    }
+
+    try {
+      Interpreter parser = new Interpreter(new FileInputStream(args[0]));
+      parser.Programme();
+      System.out.println("Program executed successfully.");
+    } catch (FileNotFoundException e) {
+      System.out.println("File not found: " + args[0]);
+    } catch (ParseException e) {
+      System.out.println("Parse error: " + e.getMessage());
+      System.out.println("Token: " + e.currentToken.image + " at line " +
+                        e.currentToken.beginLine + ", column " + e.currentToken.beginColumn);
+    } catch (Exception e) {
+      System.out.println("Runtime error: " + e.getMessage());
+      e.printStackTrace();
     }
   }
 }
@@ -157,38 +467,40 @@ TOKEN: {
 | <IDENTIFIER: ["a"-"z","A"-"Z","_"](["a"-"z","A"-"Z","0"-"9","_"])*>
 }
 
-void Programme(): {} {
-  ListeDeclarations()
-  ListeFonctionsEtProcs()
-  Main()
-  <EOF>
-}
-
-void ListeDeclarations(): {} {
-  (DeclarationVar())*
-}
-
-void DeclarationVar(): {
-  String type;
-  List ids = new ArrayList();
+void Programme(): {
+  Program program = new Program();
+  program.declarations = new ArrayList();
+  program.functions = new ArrayList();
+  program.procedures = new ArrayList();
+  Object decl;
+  Object func;
+  Object proc;
 } {
-  type = Type()
-  ListeIdentifiantVar(ids)
-  <SEMICOLON>
+  (decl = DeclarationVar() { program.declarations.add(decl); })*
+  (func = DeclarationFunc() { program.functions.add(func); })*
+  (proc = DeclarationProc() { program.procedures.add(proc); })*
+  program.main = Main()
   {
-    for (int i = 0; i < ids.size(); i++) {
-      String id = (String)ids.get(i);
-      Object initVal = getDefaultValue(type);
-      setVar(id, initVal);
-    }
+    executeProgram(program);
   }
 }
 
-void ListeIdentifiantVar(List ids): {
+Object DeclarationVar(): {
+  VarDecl decl = new VarDecl();
+} {
+  decl.type = Type()
+  decl.names = ListeIdentifiantVar()
+  <SEMICOLON>
+  { return decl; }
+}
+
+List ListeIdentifiantVar(): {
+  List ids = new ArrayList();
   Token t;
 } {
   t = <IDENTIFIER> { ids.add(t.image); }
   (<COMMA> t = <IDENTIFIER> { ids.add(t.image); })*
+  { return ids; }
 }
 
 String Type(): {
@@ -206,134 +518,109 @@ String Type(): {
   { return base; }
 }
 
-void ListeFonctionsEtProcs(): {} {
-  (
-    LOOKAHEAD(3) DeclarationFunc()
-  | DeclarationProc()
-  )*
-}
-
-void DeclarationFunc(): {
-  String returnType;
+Object DeclarationFunc(): {
+  FuncDef func = new FuncDef();
   Token name;
-  List params;
 } {
-  <FUN> <LPAREN> returnType = Type() <RPAREN>
-  name = <IDENTIFIER>
-  <LPAREN> params = ListeParam() <RPAREN>
+  <FUN> <LPAREN> func.returnType = Type() <RPAREN>
+  name = <IDENTIFIER> { func.name = name.image; }
+  <LPAREN> func.params = ListeParam() <RPAREN>
   <LBRACE>
-    {
-      FunctionDef func = new FunctionDef(returnType, params);
-      functions.put(name.image, func);
-      pushScope();
-      for (int i = 0; i < params.size(); i++) {
-        Param p = (Param)params.get(i);
-        setVar(p.name, getDefaultValue(p.type));
-      }
-    }
-    ListeDeclarations()
-    ListeInstructions()
-    { popScope(); }
+  func.body = BlockContent()
   <RBRACE>
+  { return func; }
 }
 
-void DeclarationProc(): {
+Object DeclarationProc(): {
+  ProcDef proc = new ProcDef();
   Token name;
-  List params;
 } {
   <PROC>
-  name = <IDENTIFIER>
-  <LPAREN> params = ListeParam() <RPAREN>
+  name = <IDENTIFIER> { proc.name = name.image; }
+  <LPAREN> proc.params = ListeParam() <RPAREN>
   <LBRACE>
-    {
-      ProcDef proc = new ProcDef(params);
-      procedures.put(name.image, proc);
-      pushScope();
-      for (int i = 0; i < params.size(); i++) {
-        Param p = (Param)params.get(i);
-        setVar(p.name, getDefaultValue(p.type));
-      }
-    }
-    ListeDeclarations()
-    ListeInstructions()
-    { popScope(); }
+  proc.body = BlockContent()
   <RBRACE>
+  { return proc; }
 }
 
 List ListeParam(): {
   List params = new ArrayList();
-  Param p;
+  Object p;
 } {
-  (
-    p = DeclarationParam() { params.add(p); }
-    (<COMMA> p = DeclarationParam() { params.add(p); })*
-  )?
+  (p = DeclarationParam() { params.add(p); } (<COMMA> p = DeclarationParam() { params.add(p); })*)?
   { return params; }
 }
 
-Param DeclarationParam(): {
-  String type;
+Object DeclarationParam(): {
+  Param param = new Param();
   Token name;
 } {
-  type = Type()
-  name = <IDENTIFIER>
-  { return new Param(type, name.image); }
+  param.type = Type()
+  name = <IDENTIFIER> { param.name = name.image; }
+  { return param; }
 }
 
-void Main(): {} {
+Object Main(): {
+  Block block = new Block();
+} {
   <MAIN>
   <LBRACE>
-    { pushScope(); }
-    ListeDeclarations()
-    ListeInstructions()
-    { popScope(); }
+  block.statements = ListeInstructions()
   <RBRACE>
+  { return block; }
 }
 
-void ListeInstructions(): {} {
-  (Instruction())*
-}
-
-void Instruction(): {} {
-  LOOKAHEAD(3) Affectation() <SEMICOLON>
-| Si()
-| TantQue()
-| Retour() <SEMICOLON>
-| LOOKAHEAD(3) AppelProc() <SEMICOLON>
-| Affichage() <SEMICOLON>
-| Bloc()
-}
-
-void Bloc(): {} {
-  <LBRACE>
-    { pushScope(); }
-    ListeInstructions()
-    { popScope(); }
-  <RBRACE>
-}
-
-void Affectation(): {
-  String varName;
-  Object index = null;
-  Object value;
+Object BlockContent(): {
+  Block block = new Block();
+  block.statements = new ArrayList();
+  Object decl;
+  Object stmt;
 } {
-  varName = NomVariable()
+  (decl = DeclarationVar() { block.statements.add(decl); })*
+  (stmt = Instruction() { block.statements.add(stmt); })*
+  { return block; }
+}
+
+Object Instruction(): {
+  Object stmt;
+} {
+    stmt = Affectation() <SEMICOLON> { return stmt; }
+  | stmt = Si() { return stmt; }
+  | stmt = TantQue() { return stmt; }
+  | stmt = Retour() <SEMICOLON> { return stmt; }
+  | stmt = AppelProc() <SEMICOLON> { return stmt; }
+  | stmt = Affichage() <SEMICOLON> { return stmt; }
+  | stmt = Bloc() { return stmt; }
+}
+
+Object Bloc(): {
+  Block block = new Block();
+} {
+  <LBRACE>
+  block.statements = ListeInstructions()
+  <RBRACE>
+  { return block; }
+}
+
+List ListeInstructions(): {
+  List stmts = new ArrayList();
+  Object stmt;
+} {
+  (stmt = Instruction() { stmts.add(stmt); })*
+  { return stmts; }
+}
+
+Object Affectation(): {
+  Assignment assign = new Assignment();
+} {
+  assign.varName = NomVariable()
   (
-    <LBRACK> index = ExprArith() <RBRACK>
+    <LBRACK> assign.index = ExprArith() <RBRACK>
   )?
   <ASSIGN>
-  value = Expr()
-  {
-    if (index != null) {
-      Object var = getVar(varName);
-      if (var instanceof List) {
-        int idx = ((Number)index).intValue();
-        ((List)var).set(idx, value);
-      }
-    } else {
-      setVar(varName, value);
-    }
-  }
+  assign.value = Expr()
+  { return assign; }
 }
 
 String NomVariable(): {
@@ -343,252 +630,310 @@ String NomVariable(): {
   { return t.image; }
 }
 
-void Si(): {
-  boolean cond;
-  boolean elsePresent = false;
+Object Si(): {
+  IfStmt ifStmt = new IfStmt();
 } {
-  <IF> <LPAREN> cond = ExprLog() <RPAREN>
-  (
-    LOOKAHEAD(2) Bloc()
-    {
-      if (!cond) {
-        // Skip this block
-      }
-    }
-    (
-      LOOKAHEAD(2) <ELSE> Bloc()
-      {
-        if (cond) {
-          // Skip else block
-        }
-      }
-    )?
-  )
+  <IF> <LPAREN> ifStmt.condition = ExprLog() <RPAREN>
+  ifStmt.thenBlock = Bloc()
+  [
+    <ELSE> ifStmt.elseBlock = Bloc()
+  ]
+  { return ifStmt; }
 }
 
-void TantQue(): {
-  boolean cond;
+Object TantQue(): {
+  WhileStmt whileStmt = new WhileStmt();
 } {
-  <WHILE> <LPAREN> cond = ExprLog() <RPAREN>
-  Bloc()
+  <WHILE> <LPAREN> whileStmt.condition = ExprLog() <RPAREN>
+  whileStmt.body = Bloc()
+  { return whileStmt; }
 }
 
-void Retour(): {
-  Object value;
+Object Retour(): {
+  ReturnStmt ret = new ReturnStmt();
 } {
-  <RETURN> value = Expr()
-  { throw new ReturnValue(value); }
+  <RETURN> ret.value = Expr()
+  { return ret; }
 }
 
-void AppelProc(): {
+Object AppelProc(): {
+  FuncCall call = new FuncCall();
   Token name;
-  List args;
 } {
-  name = <IDENTIFIER>
-  <LPAREN> args = ListeArgs() <RPAREN>
+  name = <IDENTIFIER> { call.name = name.image; }
+  <LPAREN> call.args = ListeArgs() <RPAREN>
+  { return call; }
 }
 
-void Affichage(): {
-  Object value;
+Object Affichage(): {
+  PrintStmt print = new PrintStmt();
 } {
-  <PRINT> <LPAREN> value = Expr() <RPAREN>
-  { System.out.println(value); }
+  <PRINT> <LPAREN> print.expression = Expr() <RPAREN>
+  { return print; }
 }
 
 Object Expr(): {
-  Object val;
+  Object expr;
 } {
-  (
-    LOOKAHEAD(3) val = ExprArith() { return val; }
-  | LOOKAHEAD(3) val = ExprLog() { return val; }
-  | val = ExprString() { return val; }
-  )
+    LOOKAHEAD(<INPUT> <LPAREN>) expr = ExprString() { return expr; }
+  | LOOKAHEAD(<STRING_LIT>) expr = ExprString() { return expr; }
+  | LOOKAHEAD(<LBRACK>) expr = ArrayLiteralExpr() { return expr; }
+  | LOOKAHEAD(ExprArith() (<GT>|<LT>|<GE>|<LE>|<EQ>|<NEQ>)) expr = ExprLog() { return expr; }
+  | LOOKAHEAD(<TRUE>|<FALSE>|<NOT>) expr = ExprLog() { return expr; }
+  | LOOKAHEAD(<LPAREN> ExprLog()) expr = ExprLog() { return expr; }
+  | expr = ExprArith() { return expr; }
 }
 
-boolean ExprLog(): {
-  boolean left, right;
+Object ExprLog(): {
+  Object left, right;
+  BinaryExpr bin;
 } {
   left = EltLog()
   (
-    <OR> right = EltLog() { left = left || right; }
+    <OR> right = EltLog() {
+      bin = new BinaryExpr();
+      bin.operator = "or";
+      bin.left = left;
+      bin.right = right;
+      left = bin;
+    }
   )*
   { return left; }
 }
 
-boolean EltLog(): {
-  boolean left, right;
+Object EltLog(): {
+  Object left, right;
+  BinaryExpr bin;
 } {
   left = TermeLog()
   (
-    <AND> right = TermeLog() { left = left && right; }
+    <AND> right = TermeLog() {
+      bin = new BinaryExpr();
+      bin.operator = "and";
+      bin.left = left;
+      bin.right = right;
+      left = bin;
+    }
   )*
   { return left; }
 }
 
-boolean TermeLog(): {
-  boolean val;
+Object TermeLog(): {
+  Object val;
+  UnaryExpr unary;
 } {
-  <NOT> val = ValLog() { return !val; }
-| val = ValLog() { return val; }
+    <NOT> val = ValLog() {
+      unary = new UnaryExpr();
+      unary.operator = "!";
+      unary.operand = val;
+      return unary;
+    }
+  | val = ValLog() { return val; }
 }
 
-boolean ValLog(): {
-  boolean val;
-  Token t;
+Object ValLog(): {
   Object expr;
+  Token t;
+  Object index = null;
+  Variable var;
+  Literal lit;
 } {
-  <TRUE> { return true; }
-| <FALSE> { return false; }
-| <LPAREN> val = ExprLog() <RPAREN> { return val; }
-| LOOKAHEAD(Comp()) val = Comp() { return val; }
-| t = <IDENTIFIER>
-  (
-    <LBRACK> expr = ExprArith() <RBRACK> {
-      Object var = getVar(t.image);
-      if (var instanceof List) {
-        int idx = ((Number)expr).intValue();
-        Object elem = ((List)var).get(idx);
-        if (elem instanceof Boolean) return (Boolean)elem;
-      }
-      return false;
+    <TRUE> {
+      lit = new Literal();
+      lit.value = Boolean.TRUE;
+      return lit;
     }
-  | {
-      Object v = getVar(t.image);
-      if (v instanceof Boolean) return (Boolean)v;
-      return false;
+  | <FALSE> {
+      lit = new Literal();
+      lit.value = Boolean.FALSE;
+      return lit;
     }
-  )
+  | <LPAREN> expr = ExprLog() <RPAREN> { return expr; }
+  | LOOKAHEAD(ExprArith() (<GT>|<LT>|<GE>|<LE>|<EQ>|<NEQ>)) expr = Comp() { return expr; }
+  | t = <IDENTIFIER> {
+      var = new Variable();
+      var.name = t.image;
+      var.index = null;
+    }
+    (
+      <LBRACK> index = ExprArith() <RBRACK> { var.index = index; }
+    )?
+    { return var; }
 }
 
-boolean Comp(): {
+Object Comp(): {
   Object left, right;
   String op;
+  BinaryExpr bin;
 } {
   left = ExprArith()
-  (
-    op = OpComp() right = ExprArith()
-    {
-      double l = ((Number)left).doubleValue();
-      double r = ((Number)right).doubleValue();
-      switch(op) {
-        case ">": return l > r;
-        case "<": return l < r;
-        case ">=": return l >= r;
-        case "<=": return l <= r;
-        case "=": return l == r;
-        case "!=": return l != r;
-        default: return false;
-      }
-    }
-  )
+  op = OpComp()
+  right = ExprArith()
+  {
+    bin = new BinaryExpr();
+    bin.operator = op;
+    bin.left = left;
+    bin.right = right;
+    return bin;
+  }
 }
 
 String OpComp(): {} {
-  <GT> { return ">"; }
-| <LT> { return "<"; }
-| <GE> { return ">="; }
-| <LE> { return "<="; }
-| <EQ> { return "="; }
-| <NEQ> { return "!="; }
+    <GT> { return ">"; }
+  | <LT> { return "<"; }
+  | <GE> { return ">="; }
+  | <LE> { return "<="; }
+  | <EQ> { return "="; }
+  | <NEQ> { return "!="; }
 }
 
 Object ExprArith(): {
   Object left, right;
+  BinaryExpr bin;
 } {
   left = EltArith()
   (
-    <PLUS> right = EltArith() {
-      left = ((Number)left).doubleValue() + ((Number)right).doubleValue();
-    }
-  | <MINUS> right = EltArith() {
-      left = ((Number)left).doubleValue() - ((Number)right).doubleValue();
-    }
+      <PLUS> right = EltArith() {
+        bin = new BinaryExpr();
+        bin.operator = "+";
+        bin.left = left;
+        bin.right = right;
+        left = bin;
+      }
+    | <MINUS> right = EltArith() {
+        bin = new BinaryExpr();
+        bin.operator = "-";
+        bin.left = left;
+        bin.right = right;
+        left = bin;
+      }
   )*
   { return left; }
 }
 
 Object EltArith(): {
   Object left, right;
+  BinaryExpr bin;
 } {
   left = TermArith()
   (
-    <MULT> right = TermArith() {
-      left = ((Number)left).doubleValue() * ((Number)right).doubleValue();
-    }
-  | <DIV> right = TermArith() {
-      left = ((Number)left).doubleValue() / ((Number)right).doubleValue();
-    }
+      <MULT> right = TermArith() {
+        bin = new BinaryExpr();
+        bin.operator = "*";
+        bin.left = left;
+        bin.right = right;
+        left = bin;
+      }
+    | <DIV> right = TermArith() {
+        bin = new BinaryExpr();
+        bin.operator = "/";
+        bin.left = left;
+        bin.right = right;
+        left = bin;
+      }
   )*
   { return left; }
 }
 
 Object TermArith(): {
   Object val;
+  UnaryExpr unary;
 } {
-  <MINUS> val = ValArith() {
-    return -((Number)val).doubleValue();
-  }
-| val = ValArith() { return val; }
+    <MINUS> val = ValArith() {
+      unary = new UnaryExpr();
+      unary.operator = "-";
+      unary.operand = val;
+      return unary;
+    }
+  | val = ValArith() { return val; }
 }
 
 Object ValArith(): {
   Token t;
   Object val;
-  Object expr;
+  Object index = null;
+  Variable var;
+  Object arr;
+  Literal lit;
 } {
-  t = <INTEGER> { return Integer.parseInt(t.image); }
-| t = <FLOAT_LIT> { return Double.parseDouble(t.image); }
-| <LPAREN> val = ExprArith() <RPAREN> { return val; }
-| t = <IDENTIFIER>
+    t = <INTEGER> {
+      lit = new Literal();
+      lit.value = Integer.valueOf(Integer.parseInt(t.image));
+      return lit;
+    }
+  | t = <FLOAT_LIT> {
+      lit = new Literal();
+      lit.value = Double.valueOf(Double.parseDouble(t.image));
+      return lit;
+    }
+  | <LPAREN> val = ExprArith() <RPAREN> { return val; }
+  | LOOKAHEAD(2) arr = ArrayLiteralExpr() { return arr; }
+  | t = <IDENTIFIER> {
+      var = new Variable();
+      var.name = t.image;
+      var.index = null;
+    }
+    (
+      <LBRACK> index = ExprArith() <RBRACK> { var.index = index; }
+    )?
+    { return var; }
+}
+
+Object ArrayLiteralExpr(): {
+  ArrayLiteral arr = new ArrayLiteral();
+  arr.elements = new ArrayList();
+  Object elem;
+} {
+  <LBRACK>
   (
-    <LBRACK> expr = ExprArith() <RBRACK> {
-      Object var = getVar(t.image);
-      if (var instanceof List) {
-        int idx = ((Number)expr).intValue();
-        return ((List)var).get(idx);
-      }
-      return 0;
-    }
-  | {
-      Object v = getVar(t.image);
-      if (v instanceof Number) return v;
-      return 0;
-    }
-  )
+    elem = Expr() { arr.elements.add(elem); }
+    (<COMMA> elem = Expr() { arr.elements.add(elem); })*
+  )?
+  <RBRACK>
+  { return arr; }
 }
 
 Object ExprString(): {
   Object result;
   Object next;
+  BinaryExpr bin;
+  InputExpr input;
 } {
-  <INPUT> <LPAREN> <RPAREN> {
-    Scanner sc = new Scanner(System.in);
-    return sc.nextLine();
-  }
-| result = TermeString()
-  (
-    <PLUS> next = TermeString() {
-      result = result.toString() + next.toString();
+    <INPUT> <LPAREN> <RPAREN> {
+      input = new InputExpr();
+      return input;
     }
-  )*
-  { return result; }
+  | result = TermeString()
+    (
+      <PLUS> next = TermeString() {
+        bin = new BinaryExpr();
+        bin.operator = "+";
+        bin.left = result;
+        bin.right = next;
+        result = bin;
+      }
+    )*
+    { return result; }
 }
 
 Object TermeString(): {
   Token t;
   Object val;
+  Variable var;
+  Literal lit;
 } {
-  t = <STRING_LIT> {
-    String s = t.image;
-    return s.substring(1, s.length() - 1);
-  }
-| <LPAREN> val = ExprArith() <RPAREN> {
-    return val.toString();
-  }
-| t = <IDENTIFIER> {
-    Object v = getVar(t.image);
-    return v != null ? v.toString() : "";
-  }
+    t = <STRING_LIT> {
+      lit = new Literal();
+      lit.value = t.image.substring(1, t.image.length() - 1);
+      return lit;
+    }
+  | <LPAREN> val = ExprArith() <RPAREN> { return val; }
+  | t = <IDENTIFIER> {
+      var = new Variable();
+      var.name = t.image;
+      var.index = null;
+      return var;
+    }
 }
 
 List ListeArgs(): {
