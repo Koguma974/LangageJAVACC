@@ -60,7 +60,7 @@ TOKEN : {
   <EXPRLOG: <ELTLOG> ("or" <ELTLOG>)* >
 | <ELTLOG: <TERMELOG> ("and" <TERMELOG>)* >
 | <TERMELOG: ("!" <VALOG>) | <VALOG> >
-| <VALOG: <VARIABLELOG> | <APPELFUNCLOG> | <COMP> | <IDENTIFIANT> "[" <EXPARITH> ("," <EXPARITH>)* "]" > // "("<EXPRLOG>")"
+| <VALOG: <VARIABLELOG>  | <COMP> | <IDENTIFIANT> "[" <EXPARITH> ("," <EXPARITH>)* "]" > // "("<EXPRLOG>")" | <APPELFUNCLOG>
 }
 
 
